@@ -1,0 +1,322 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+NUM_PROCS?=1
+include $(BASEDIR)/Settings/fivec_parameters.txt
+include $(BASEDIR)/Settings/hic_parameters.txt
+EMPTY=
+SPACE=$(EMPTY) $(EMPTY)
+COMMA=$(EMPTY),$(EMPTY)
+5C_NAMES=Nora_ESC_male_E14 Phillips_ESC
+5C_SRR=$(foreach NAME,$(5C_NAMES),$(subst $(SPACE),$(COMMA),$(shell python $(BASEDIR)/Scripts/Support/extract_field.py $(BASEDIR)/Settings/fivec_filelist.txt $(NAME)) ))
+HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_HindIII hg19_GM12878_MboI
+HIC_SRR=$(foreach NAME,$(HIC_NAMES),$(subst $(SPACE),$(COMMA),$(shell python $(BASEDIR)/Scripts/Support/extract_field.py $(BASEDIR)/Settings/hic_filelist.txt $(NAME)) ))
+RESOLUTIONS=1M 250K 50K 10K
+MM9_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,X
+HG19_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X
+TRANS=-t -t $(EMPTY) $(EMPTY)
+ifeq ($(NUM_PROCS),1)
+	MPI=$(EMPTY)
+else
+	MPI=mpirun -np $(NUM_PROCS)
+endif
+
+###########################################################################
+all: setup fivec hic
+###########################################################################
+
+###########################################################################
+Compile HiFive
+###########################################################################
+setup:
+	cd $(BASEDIR)/Scripts/hifive-1.0.3 && python setup.py install --prefix $(BASEDIR)
+	export PYTHONPATH=$(BASEDIR)/lib/python2.7/site-packages/$(PYTHONPATH)
+
+###########################################################################
+# Create bed files of RE cutsites
+###########################################################################
+$(BASEDIR)/Data/Genome/%.bed:
+	$(BOWTIE) --sam --tryhard -a -v 0 --norc -f \
+		$(BOWTIE_INDEX_DIR)/$(word 1,$(subst _,$(SPACE),$*))/$(word 1,$(subst _,$(SPACE),$*)) \
+		$(BASEDIR)/Data/Genome/$(word 2,$(subst _,$(SPACE),$*)).fa > $(BASEDIR)/tmp/$*.sam 2> $(BASEDIR)/tmp/$*.stats
+	python $(BASEDIR)/Scripts/Support/Sam2Bed.py $(BASEDIR)/tmp/$*.sam $@
+	rm $(BASEDIR)/tmp/$*.sam
+	rm $(BASEDIR)/tmp/$*.stats
+
+
+###########################################################################
+# Process 5C data using HiFive
+###########################################################################
+
+$(BASEDIR)/Data/FiveC/HiFive/%_prob.fcp: $(BASEDIR)/Data/FiveC/HiFive/%.fcp
+	$(BASEDIR)/bin/hifive 5c-normalize probability \
+		-m $(5C_MINDIST) \
+		-x $(5C_MAXDIST) \
+		-o $@ \
+		-b $(5C_PROB_ITER) \
+		-g $(5C_PROB_CHANGE) \
+		-l $(5C_STEP) \
+		$^
+
+$(BASEDIR)/Data/FiveC/HiFive/%_exp.fcp: $(BASEDIR)/Data/FiveC/HiFive/%.fcp
+	$(BASEDIR)/bin/hifive 5c-normalize express \
+		-m $(5C_MINDIST) \
+		-x $(5C_MAXDIST) \
+		-o $@ \
+		-e $(5C_EXP_ITER) \
+		-d \
+		-w $(5C_EXP_READS) \
+		-k \
+		$^
+
+$(BASEDIR)/Data/FiveC/HiFive/%_expKR.fcp: $(BASEDIR)/Data/FiveC/HiFive/%.fcp
+	$(BASEDIR)/bin/hifive 5c-normalize express \
+		-m $(5C_MINDIST) \
+		-x $(5C_MAXDIST) \
+		-o $@ \
+		-e $(5C_EXP_ITER) \
+		-d \
+		-w $(5C_EXP_READS) \
+		-k \
+		-z \
+		$^
+
+$(BASEDIR)/Data/FiveC/HiFive/%_bin.fcp: $(BASEDIR)/Data/FiveC/HiFive/%.fcp
+	$(BASEDIR)/bin/hifive 5c-normalize binning \
+		-m $(5C_MINDIST) \
+		-x $(5C_MAXDIST) \
+		-o $@ \
+		-i $(5C_BIN_ITER) \
+		-t $(5C_THRESHOLD) \
+		-y $(5C_BIN_READS) \
+		-v $(5C_MODEL) \
+		-n $(5C_MODELBINS) \
+		-u $(5C_PARAMS) \
+		$^
+
+$(BASEDIR)/Data/FiveC/HiFive/%.fcp: $(BASEDIR)/Data/FiveC/HiFive/%.fcd
+	$(BASEDIR)/bin/hifive 5c-project \
+		-f $(5C_MININT) \
+		-m $(5C_MINDIST) \
+		-x $(5C_MAXDIST) \
+		$^ \
+		$@
+
+define fivec_data_template
+$(BASEDIR)/Data/FiveC/HiFive/$1.fcd: $(BASEDIR)/Data/FiveC/HiFive/$(word 1,$(subst _,$(SPACE),$1)).frags
+	$(BASEDIR)/bin/hifive fragments \
+		$(foreach N,$2,-B $(BASEDIR)/Data/FiveC/Mapping/$N_1.bam $(BASEDIR)/Data/FiveC/Mapping/$N_2.bam) \
+		$$^ \
+		$$@
+endef
+$(foreach N,$(shell seq $(words $(5C_NAMES))),$(eval $(call fivec_data_template,$(word $(N),$(5C_NAMES)),$(subst $(COMMA),$(SPACE),$(word $(N),$(5C_SRR))))))
+
+$(BASEDIR)/Data/FiveC/HiFive/%.frags: $(BASEDIR)/Data/FiveC/Data/%_Primers_gc.bed
+	@mkdir -p $(BASEDIR)/Data/FiveC/HiFive
+	$(BASEDIR)/bin/hifive fragments \
+		$^ \
+		$@
+
+$(BASEDIR)/Data/FiveC/Data/%_Primers_gc.bed: $(BASEDIR)/Data/FiveC/Data/%_Primers.bed $(BASEDIR)/Data/FiveC/Data/%_Primers.fa
+	$(BASEDIR)/Scripts/Support/append_5C_gc.py $^ $@
+
+###########################################################################
+# Create 5C heatmaps
+###########################################################################
+fivec: $(foreach TYPE,prob exp expKR bin,$(foreach NAME,$(5C_NAMES),$(BASEDIR)/Data/FiveC/HiFive/HM/$(NAME)_$(TYPE).fch))
+
+$(BASEDIR)/Data/FiveC/HiFive/HM/%.fch: $(BASEDIR)/Data/FiveC/HiFive/%.fcp
+	@mkdir -p $(BASEDIR)/Data/FiveC/HiFive/HM
+	$(BASEDIR)/bin/hifive 5c-heatmap -b 0 -d fragment -a compact $^ $@
+
+###########################################################################
+# Process HiC data using HiFive
+###########################################################################
+hic: $(foreach TYPE,prob exp bin,$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/HiFive/$(NAME)_$(TYPE).hcp)) \
+	$(foreach NAME,mm9_ESC_HindIII mm9_ESC_NcoI,$(BASEDIR)/Data/HiC/HiFive/$(NAME)_expnodist.hcp) \
+	$(foreach NAME,mm9_ESC_HindIII mm9_ESC_NcoI,$(foreach PC,1 3 6,$(BASEDIR)/Data/HiC/HiFive/$(NAME)_binPC$(PC).hcp))
+
+$(BASEDIR)/Data/HiC/HiFive/%_MboI_prob.hcp: $(BASEDIR)/Data/HiC/HiFive/%_MboI.hcd
+	$(MPI) $(BASEDIR)/bin/hifive hic-project \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MBOI_MAXDIST) \
+		-j $(HIC_MINBIN) \
+		-n $(HIC_NUMBIN) \
+		$^ \
+		$@
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize probability \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MBOI_MAXDIST) \
+		-c $(HG19_CHROMS) \
+		-b $(HIC_PROB_ITER) \
+		-g $(HIC_PROB_CHANGE) \
+		-p \
+		-l $(HIC_PROB_STEP) \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/mm9%_prob.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize probability \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(MM9_CHROMS) \
+		-b $(HIC_PROB_ITER) \
+		-g $(HIC_PROB_CHANGE) \
+		-p \
+		-l $(HIC_PROB_STEP) \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/hg19%_prob.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize probability \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(HG19_CHROMS) \
+		-b $(HIC_PROB_ITER) \
+		-g $(HIC_PROB_CHANGE) \
+		-p \
+		-l $(HIC_PROB_STEP) \
+		$^
+
+define pseudcount_template
+$(BASEDIR)/Data/HiC/HiFive/mm9%_binPC$1.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize binning \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(MM9_CHROMS) \
+		-r $(HIC_BIN_ITER) \
+		-t $(HIC_BIN_THRESHOLD) \
+		-y $(HIC_BIN_READS) \
+		-v $(HIC_MODEL) \
+		-s $(HIC_MODELBINS) \
+		-u $(HIC_PARAMS) \
+		--pseudocounts $1
+		$^
+endef
+$(foreach PC,1 3 6,$(eval $(call pseudocount_template,$(PC))))
+
+$(BASEDIR)/Data/HiC/HiFive/mm9%_bin.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize binning \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(MM9_CHROMS) \
+		-r $(HIC_BIN_ITER) \
+		-t $(HIC_BIN_THRESHOLD) \
+		-y $(HIC_BIN_READS) \
+		-v $(HIC_MODEL) \
+		-s $(HIC_MODELBINS) \
+		-u $(HIC_PARAMS) \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/hg19%_bin.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize binning \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(HG19_CHROMS) \
+		-r $(HIC_BIN_ITER) \
+		-t $(HIC_BIN_THRESHOLD) \
+		-y $(HIC_BIN_READS) \
+		-v $(HIC_MODEL) \
+		-s $(HIC_MODELBINS) \
+		-u $(HIC_PARAMS) \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/mm9%_expnodist.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize express \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(MM9_CHROMS) \
+		-e $(HIC_EXP_ITER) \
+		-w $(HIC_EXP_READS) \
+		-g $(HIC_EXP_CHANGE) \
+		-k \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/mm9%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize express \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(MM9_CHROMS) \
+		-e $(HIC_EXP_ITER) \
+		-w $(HIC_EXP_READS) \
+		-g $(HIC_EXP_CHANGE) \
+		-d \
+		-k \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/hg19%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
+	$(MPI) $(BASEDIR)/bin/hifive hic-normalize express \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-o $@ \
+		-c $(HG19_CHROMS) \
+		-e $(HIC_EXP_ITER) \
+		-w $(HIC_EXP_READS) \
+		-g $(HIC_EXP_CHANGE) \
+		-d \
+		-k \
+		$^
+
+$(BASEDIR)/Data/HiC/HiFive/%.hcp: $(BASEDIR)/Data/HiC/HiFive/%.hcd
+	$(MPI) $(BASEDIR)/bin/hifive hic-project \
+		-f $(HIC_MININT) \
+		-m $(HIC_MINDIST) \
+		-x $(HIC_MAXDIST) \
+		-j $(HIC_MINBIN) \
+		-n $(HIC_NUMBIN) \
+		$^ \
+		$@
+
+define hic_data_template
+$(BASEDIR)/Data/HiC/HiFive/$1.hcd: $(BASEDIR)/Data/HiC/HiFive/$(word 1,$(subst _,$(SPACE),$1))_$(word 3,$(subst _,$(SPACE),$1)).fends
+	$(BASEDIR)/bin/hifive hic-data \
+		$(foreach N,$2,-B $(BASEDIR)/Data/HiC/Mapping/$(N)_1.bam $(BASEDIR)/Data/HiC/Mapping/$(N)_2.bam) \
+		-i $(HIC_INSERT) \
+		$$^ \
+		$$@
+endef
+$(foreach N,$(shell seq $(words $(HIC_NAMES))),$(eval $(call hic_data_template,$(word $(N),$(HIC_NAMES)),$(subst $(COMMA),$(SPACE),$(word $(N),$(HIC_SRR))))))
+
+$(BASEDIR)/Data/HiC/HiFive/%.fends: $(BASEDIR)/Data/Genome/%.bed
+	$(BASEDIR)/bin/hifive fends \
+		-B $^ \
+		$@
+
+###########################################################################
+# Create HiC heatmaps
+###########################################################################
+hic: $(foreach RES,$(RESOLUTIONS),$(foreach TYPE,prob bin exp,$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/HiFive/HM/$(NAME)_$(TYPE)_$(RES).hch))) \
+	$(foreach RES,$(RESOLUTIONS),$(foreach NAME,mm9_ESC_HindIII mm9_ESC_NcoI,$(BASEDIR)/Data/HiC/HiFive/HM/$(NAME)_expnodist_$(RES).hch)) \
+	$(foreach RES,$(RESOLUTIONS),$(foreach NAME,mm9_ESC_HindIII mm9_ESC_NcoI,$(foreach PC,1 3 6,$(BASEDIR)/Data/HiC/HiFive/HM/$(NAME)_binPC$(PC)_$(RES).hch)))
+
+define heatmap_template
+$(BASEDIR)/Data/HiC/HiFive/HM/$3%_$1.hch: $(BASEDIR)/Data/HiC/HiFive/$3%.hcp
+	@mkdir -p $(BASEDIR)/Data/HiC/HiFive/HM
+	$(MPI) $(BASEDIR)/bin/hifive hic-heatmap \
+		-b $(subst K,000,$(subst M,000000,$1)) \
+		-d fend \
+		-c $4 \
+		$2 \
+		$$^ \
+		$$@
+endef
+$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call heatmap_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)),mm9,$(MM9_CHROMS))))
+$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call heatmap_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)),hg19,$(HG19_CHROMS))))
+
+
+
+.SECONDARY:
+.PHONY: setup hic fivec

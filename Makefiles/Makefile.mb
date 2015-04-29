@@ -1,0 +1,64 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+include $(BASEDIR)/Settings/hic_parameters.txt
+EMPTY=
+SPACE=$(EMPTY) $(EMPTY)
+COMMA=$(EMPTY),$(EMPTY)
+HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_MboI hg19_GM12878_HindIII
+RESOLUTIONS=1M 250K 50K 10K
+TRANS=-t -t  
+HG19_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X
+MM9_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,X
+CHROMS=$(MM9_CHROMS) $(MM9_CHROMS) $(HG19_CHROMS) $(HG19_CHROMS)
+NUM_PROCS?=1
+ifeq ($(NUM_PROCS),1)
+	MPI=$(EMPTY)
+else
+	MPI=mpirun -np $(NUM_PROCS)
+endif
+
+###########################################################################
+all: mb heatmaps
+###########################################################################
+
+###########################################################################
+# Process HiC data using Matrix Balancing
+###########################################################################
+mb: $(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/MB/$(NAME).hcp)
+
+$(BASEDIR)/Data/HiC/MB/mm9%.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
+	@mkdir -p $(BASEDIR)/Data/HiC/MB
+	$(MPI) python $(BASEDIR)/Scripts/MB/create_hic_MB_project.py \
+		-c $(MM9_CHROMS) \
+		-b \
+		$^ \
+		$@
+
+$(BASEDIR)/Data/HiC/MB/hg19%.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
+	@mkdir -p $(BASEDIR)/Data/HiC/MB
+	$(MPI) python $(BASEDIR)/Scripts/MB/create_hic_MB_project.py \
+		-c $(HG19_CHROMS) \
+		-b \
+		$^ \
+		$@
+
+###########################################################################
+# Generate enrichment heatmaps using Matrix Balancing
+###########################################################################
+heatmaps: $(foreach RES,$(RESOLUTIONS),$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/MB/HM/$(NAME)_$(RES).hch))
+
+define heatmap_template
+$(BASEDIR)/Data/HiC/MB/HM/$3%_$1.hch: $(BASEDIR)/Data/HiC/HiFive/$3%.hcp
+	@mkdir -p $(BASEDIR)/Data/HiC/MB/HM
+	$(MPI) $(BASEDIR)/bin/hifive hic-heatmap \
+		-b $(subst K,000,$(subst M,000000,$1)) \
+		-d fend \
+		-c $4 \
+		$2 \
+		$$^ \
+		$$@
+endef
+$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call heatmap_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)),mm9,$(MM9_CHROMS))))
+$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call heatmap_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)),hg19,$(HG19_CHROMS))))
+
+.SECONDARY:
+.PHONY: all mb heatmaps

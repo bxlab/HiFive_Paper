@@ -1,0 +1,4 @@
+raw_field	field	size	type
+map	map_bin	5	const
+frag_gc	frag_gc_bin	20	optimize
+frag_len	frag_len_bin	20	optimize

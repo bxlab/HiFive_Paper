@@ -1,0 +1,52 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+include $(BASEDIR)/Settings/hic_parameters.txt
+EMPTY=
+SPACE=$(EMPTY) $(EMPTY)
+COMMA=$(EMPTY),$(EMPTY)
+HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_MboI hg19_GM12878_HindIII
+HG19_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X
+MM9_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,X
+CHROMS=$(MM9_CHROMS) $(MM9_CHROMS) $(HG19_CHROMS) $(HG19_CHROMS)
+RESOLUTIONS=1M 250K 50K 10K
+TRANS=True True False False
+ifeq ($(NUM_PROCS),1)
+	MPI=$(EMPTY)
+else
+	MPI=mpirun -np $(NUM_PROCS)
+endif
+
+###########################################################################
+all: setup heatmaps
+###########################################################################
+
+###########################################################################
+# Create cython library for heatmap functions
+###########################################################################
+setup: $(BASEDIR)/Scripts/HiCNorm/normalization_functions.so
+
+$(BASEDIR)/Scripts/HiCNorm/normalization_functions.so:
+	cd $(BASEDIR)/Scripts/HiCNorm && python $(BASEDIR)/Scripts/HiCNorm/normalization_setup.py build_ext --inplace
+
+###########################################################################
+# Generate enrichment heatmaps using HiCNorm
+###########################################################################
+heatmaps: $(foreach RES,$(RESOLUTIONS),$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/HiCNorm/HM/$(NAME)_$(RES).hch))
+
+define HM_template
+$(BASEDIR)/Data/HiC/HiCNorm/HM/$1_$2.hch: $(BASEDIR)/Data/HiC/HiFive/$1.hcd \
+	$(BASEDIR)/Data/Genome/$3.fend \
+	$(BASEDIR)/Scripts/HiCNorm/normalization_functions.so
+	@mkdir -p $(BASEDIR)/Data/HiC/HiCNorm/HM
+	python $(BASEDIR)/Scripts/HiCNorm/normalization.py \
+		$(BASEDIR)/Data/Genome/$3.fend \
+		$(BASEDIR)/Data/HiC/HiFive/$1.hcd \
+		$$@ \
+		$(HIC_INSERT) \
+		$(subst K,000,$(subst M,000000,$2)) \
+		$4 \
+		$5
+endef
+$(foreach M,$(shell seq $(words $(HIC_NAMES))),$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call HM_template,$(word $(M),$(HIC_NAMES)),$(word $(N),$(RESOLUTIONS)),$(word 1,$(subst _, ,$(word $(M),$(HIC_NAMES))))_$(word 3,$(subst _, ,$(word $(M),$(HIC_NAMES)))),$(word $(N),$(TRANS)),$(word $(M),$(CHROMS))))))
+
+.SECONDARY:
+.PHONY: all setup heatmaps

@@ -1,0 +1,193 @@
+============================================================================================================
+
+hicpipe version 0.9 (beta release)
+
+Written by Eitan Yaffe
+Amos Tanay's group
+Weizmann Institute of Science, Rehovot, Israel
+
+References:
+
+Probabilistic modeling of Hi-C contact maps eliminates systematic biases to characterize global 
+chromosomal architecture, Eitan Yaffe and Amos Tanay. Nature Genetics (2011).
+
+On the web see http://compgenomics.weizmann.ac.il/tanay/?page_id=283
+
+============================================================================================================
+
+============================================================================================================
+0. Introduction
+============================================================================================================
+
+hicpipe estimates biases in Hi-C experiments and corrects them for a
+set of user-defined biases. The input is a list of mapped paired reads
+and a list attributed fragment ends. Given a correction model (defined
+by the set of fragment end attributes), hicpipe estimates the joint
+biases for the given attributes. It then computes background-predicted
+and normalized contact matrices for a set of resolutions. For example,
+published Hi-C datasets (Lieberman-Aiden et al. 2009) were corrected
+for fragment length and fragment GC-content. However the framework is
+general in the sense that hicpipe can estimate and correct any number
+of independent biases.
+
+hicpipe does not handle with mapping raw sequences. Users must use
+standard programs to map sequences to the genome (such as maq or
+bowtie). Also, users must generate as input the fragment end table
+given the restriction enzyme and the relevant genome build, although
+specific pre-computed tables (HindIII/NcoI hg18) can be downloaded
+from the website of the Tanay group
+(http://compgenomics.weizmann.ac.il/tanay/?page_id=283).
+
+============================================================================================================
+1. Prerequisites
+============================================================================================================
+
+The pipeline was tested on R version 2.13.1, although it will probably
+work well on previous R versions. It requires the following R
+libraries installed: Rsge, maxLik, R.utils
+
+============================================================================================================
+2. Config file
+============================================================================================================
+
+When running hicpipe a config file must be specified. The config file
+defines for a given run all parameters, including the fragment end
+table, the paired read files, the output directory and other optional
+parameters.
+
+Please set the RSCRIPT variable to the path of the Rscripts binary.
+
+For an example (with comments) see the input/Test/test_cluster.cfg file.
+
+============================================================================================================
+3. Input files
+============================================================================================================
+
+All files are in a tab-delimited ascii format.
+
+Fends table
+-----------
+This file contains a line for each fragment end in the sequence. If
+the line has zero in its 'valid' column (6th) then the fend is used only to map
+the reads, but then is discarded from further downstream analysis. For
+example, if an fend has a low mappability (under 0.5) we indicate it
+by marking its 'valid' column with zero. Then in the
+first step reads will be mapped to it correctly (using the chr and
+coord columns). If the fend was not mentioned at all these reads would
+be mapped to the next fend by mistake. 
+
+The table has the following mandatory fields:
+fend: fragment end identifier
+frag: fragment identifier
+chr: chromosome
+coord: coordinate
+valid: Use both for mapping and for downstream analysis (0 or 1)
+And optional fields such as:
+frag_len: fragment length (bp)
+frag_gc: GC-content near fragment end (between 0 and 1)
+map_bin: mappability bin (integer)
+
+See const_correction/map.bin_ranges for the conversion table between
+the map_bin index and the actual mapability score.
+
+For an example see the input/Test/test.full_fends file.
+
+To normalize given other fields (E.g. 'frag_color') add a column in
+the Fend table and a matching column in the model table (see below).
+
+Paired reads table
+------------------
+A paired read table has the following fields:
+chr1/2: chromosome 1/2
+coord1/2: coordinate 1/2
+strand1/2: A +/- sign means that the sequenced DNA segment continues towards the +/- side of the genome.
+
+For an example see the input/Test/test.raw file.
+
+Model table
+-----------
+Defines the correction parameters, and has the following fields:
+raw_field: Name of field in fends table
+field: Name of binned field (usually it is raw field with _bin as a suffix)
+size: Number of bins used
+type: either const (like for mappability) or optimize. The correction
+      matrices are co-optimized in iterations, until the likelihood stops to improve.
+
+The model files are located in the models directory. If other
+normalization fields are used they must be specified in this table.
+
+Pre-computed input files
+------------------------
+Input files for published Hi-C datasets (Lieberman-Aiden et al. 2009)
+can be downloaded from: http://compgenomics.weizmann.ac.il/tanay/?page_id=283
+
+============================================================================================================
+4. Running hicpipe
+============================================================================================================
+
+To run the hicpipe first cd into the hicpipe directory. Then run make,
+specifying the config file.  For example, to run the pipeline with the
+test dataset (small part extracted from the Lieberman2009_NcoI dataset) run:
+
+%> make CFG=input/Test/test_cluster.cfg
+
+Output files are created in the ODIR directory, which is defined in the config file.
+
+============================================================================================================
+5. Output
+============================================================================================================
+
+For each binsize of BINSIZES the hicpipe pipeline generates in ODIR 2 files:
+
+DATASET_BINSIZE.cbins: The genomic coordinate of the bins
+
+DATASET_BINSIZE.n_contact: Contact map with observed and expected counts for all square bins 
+
+In order to visualize a contact map, create an image using the log
+ratio between the 'observed_count' and 'expected_count' fields.
+
+============================================================================================================
+6. Implementation details
+============================================================================================================
+
+hicpipe is based on a collection of perl scripts, R scripts and c++
+code, all encapsulated within a single simple makefile. The pipeline
+has 5 steps, see the makefile for more details.
+
+All output files
+----------------
+
+X.fends: table of fends (fragment ends)
+
+X.binned: same as fends with binned fields added
+
+X.bins: actual ranges of all bins
+
+X.mat: paired fends
+
+X.mat_stats: statistics for the coord to fend step
+
+X.mdl: model file, specifies correction model parameters
+
+X.nm: table of observed and potential contacts per bin, used to learn model
+
+X.prior: prior interaction probability
+
+X_bin.f: correction functions according to correction bins for field X
+
+X.bin_ranges: conversion between bins and values for corrected field X
+
+X.cbinned: fends binned according to coordinate based bins
+
+X.cbins: table with coordinate bin ranges
+
+X.o_contact, .e_contact, .n_contact: observed, expected and united matrices
+
+X.o_smooth, .e_smooth, .n_smooth: observed, expected and united matrices (smoothed)
+
+============================================================================================================
+7. Versions info
+============================================================================================================Version 0.9:	Initial version
+Version 1.0:	- Added 'valid' column to the fends table (instead of marking non valid fends with NAs). 
+				- Replaced hard-coded path to Rscript with a parameter (RSCRIPT in makefile)
+

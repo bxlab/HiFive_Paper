@@ -1,0 +1,17 @@
+# Paths to needed external programs and files
+BOWTIE=~/bin/bowtie
+BOWTIE_BUILD=~/bin/bowtie-build
+BOWTIE_INDEX_DIR=~/cache/bowtie_indices
+
+SAMTOOLS=~/bin/samtools
+
+FASTQ_DUMP=~/bin/fastq-dump.2.3.5.2
+
+RSCRIPT=~/bin/Rscript
+
+TMPDIR=~/tmp
+
+MM9_FA_PATH=~/cache/Fasta/mm9
+HG19_FA_PATH=~/cache/Fasta/hg19
+
+NUM_PROCS=64

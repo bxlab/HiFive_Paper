@@ -1,0 +1,18 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+
+###########################################################################
+all: setup
+###########################################################################
+
+###########################################################################
+# Install HiCLib
+###########################################################################
+setup:
+	@cd $(BASEDIR)/Scripts/HiCLib/bx-python-0.7.1 && python setup.py install --prefix $(BASEDIR)
+	@cd $(BASEDIR)/Scripts/HiCLib/mirnylab-hiclib-460c3fbc0f72 && python setup.py install --prefix $(BASEDIR)
+	@cd $(BASEDIR)/Scripts/HiCLib/numexpr-2.4.3 && python setup.py install --prefix $(BASEDIR)
+	@export PYTHONPATH=$(BASEDIR)/lib/python2.7/site-packages:$(PYTHONPATH)
+	@mkdir -p $(BASEDIR)/Data/HiC/HiCLib/HM
+
+.SECONDARY:
+.PHONY: all

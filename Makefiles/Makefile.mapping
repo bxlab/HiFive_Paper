@@ -1,0 +1,82 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+EMPTY=
+SPACE=$(EMPTY) $(EMPTY)
+COMMA=$(EMPTY),$(EMPTY)
+
+###########################################################################
+all: fetch mapping
+###########################################################################
+
+###########################################################################
+# Fetch and split SRA files for HiC and 5C data
+###########################################################################
+fetch: fetch_fivec fetch_hic
+
+fetch_fivec:
+	python $(BASEDIR)/Scripts/Support/fetch_sra_files.py \
+		$(BASEDIR)/Settings/fivec_filelist.txt \
+		$(BASEDIR)/tmp \
+		$(BASEDIR)/Data/FiveC/Fastq \
+		$(BASEDIR)/bin/fastq-dump
+
+fetch_hic:
+	python $(BASEDIR)/Scripts/Support/fetch_sra_files.py \
+		$(BASEDIR)/Settings/hic_filelist.txt \
+		$(BASEDIR)/tmp \
+		$(BASEDIR)/Data/HiC/Fastq \
+		$(BASEDIR)/bin/fastq-dump
+
+###########################################################################
+# Retrieve and reformat Nora primer data
+###########################################################################
+$(BASEDIR)/Data/FiveC/Data/Nora_Primers.fa:
+	cd $(BASEDIR)/tmp && \
+		wget ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE35nnn/GSE35721/suppl/GSE35721_PRIMERPOOL_769_XIC3.fa.gz && \
+		gunzip GSE35721_PRIMERPOOL_769_XIC3.fa.gz
+	python $(BASEDIR)/Scripts/Support/Fa2Bed.py $(BASEDIR)/tmp/GSE35721_PRIMERPOOL_769_XIC3.fa \
+		$(BASEDIR)/Data/FiveC/Data/Nora_Primers.bed XIC
+	python $(BASEDIR)/Scripts/Support/RenameFa.py $(BASEDIR)/tmp/GSE35721_PRIMERPOOL_769_XIC3.fa \
+		$(BASEDIR)/Data/FiveC/Data/Nora_Primers.fa XIC
+	@rm $(BASEDIR)/tmp/GSE35721_PRIMERPOOL_769_XIC3.fa
+
+###########################################################################
+# Create bowtie index from 5C primers for 5C mapping
+###########################################################################
+define index_template
+$(BASEDIR)/Data/FiveC/Data/$1_Index/$1_Index.1.ebwt: $(BASEDIR)/Data/FiveC/Data/$1_Primers.fa
+	@mkdir -p $(BASEDIR)/Data/FiveC/Data/$1_Index
+	$(BASEDIR)/bin/bowtie_build $$^ $(BASEDIR)/Data/FiveC/Data/$1_Index/$1_Index
+endef
+$(foreach NAME,Nora Phillips, $(eval $(call index_template,$(NAME))))
+
+###########################################################################
+# Map SRA files to appropriate genomes or primer sets
+###########################################################################
+mapping: map_hic map_fivec
+
+map_hic:
+	python $(BASEDIR)/Scripts/Support/iterative_alignment_sbatch.py \
+		$(BASEDIR)/Settings/hic_filelist.txt \
+		$(BASEDIR)/Data/HiC/Fastq \
+		$(BASEDIR)/tmp \
+		$(BASEDIR)/Data/HiC/Mapping \
+		$(BASEDIR)/bin/bowtie \
+		$(BASEDIR/Data/Genome/bowtie_indices \
+		$(BASEDIR)/bin/samtools \
+		$(BASEDIR)/Scripts/Support/compile_mapping_stats.py \
+		$(NUM_PROCS)
+
+map_fivec: $(foreach NAME,Nora Phillips,$(BASEDIR)/Data/FiveC/Data/$(NAME)_Index/$(NAME)_Index.1.ebwt)
+	python $(BASEDIR)/Scripts/Support/iterative_alignment_sbatch.py \
+		$(BASEDIR)/Settings/fivec_filelist.txt \
+		$(BASEDIR)/Data/FiveC/Fastq \
+		$(BASEDIR)/tmp \
+		$(BASEDIR)/Data/FiveC/Mapping \
+		$(BASEDIR)/bin/bowtie \
+		$(BASEDIR)/Data/FiveC/Data \
+		$(BASEDIR)/bin/samtools \
+		$(BASEDIR)/Scripts/Support/compile_mapping_stats.py \
+		$(NUM_PROCS)
+
+.SECONDARY:
+.PHONY:all fetch fetch_fivec fetch_hic mapping map_hic map_fivec

@@ -1,0 +1,90 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+
+all: $(foreach N,2 3 4,$(BASEDIR)/Figures/figure${N}.pdf) $(foreach N,1 2 3 4 5 6 7 8 9,$(BASEDIR)/Figures/figureS${N}.pdf)
+
+###########################################################################
+# Figure 2 - 5C algorithm comparison
+###########################################################################
+
+$(BASEDIR)/Figures/figure2.pdf:
+	python $(BASEDIR)/Scripts/Figures/fivec_algorithm_comparison.py $@
+
+###########################################################################
+# Figure 3 - HiC method comparison
+###########################################################################
+
+$(BASEDIR)/Figures/figure3.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_method_comparison.py $@
+
+###########################################################################
+# Figure 4 - Method runtimes
+###########################################################################
+
+$(BASEDIR)/Figures/figure4.pdf:
+	python $(BASEDIR)/Scripts/Figures/time_comparison.py $@
+
+###########################################################################
+# Figure S1 - C methods 
+###########################################################################
+
+$(BASEDIR)/Figures/figureS1.pdf:
+	python $(BASEDIR)/Scripts/Figures/C_methods.py $@
+
+###########################################################################
+# Figure S2 - 5C filtering
+###########################################################################
+
+$(BASEDIR)/Figures/figureS2.pdf:
+	python $(BASEDIR)/Scripts/Figures/fivec_filtering.py $@
+
+###########################################################################
+# Figure S3 - HiC filtering
+###########################################################################
+
+$(BASEDIR)/Figures/figureS3.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_filtering.py $@
+
+###########################################################################
+# Figure S4 - HiC read pairings
+###########################################################################
+
+$(BASEDIR)/Figures/figureS4.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_read_pairings.py $@
+
+###########################################################################
+# Figure S5 - 5C distance function
+###########################################################################
+
+$(BASEDIR)/Figures/figureS5.pdf:
+	python $(BASEDIR)/Scripts/Figures/fivec_distance_function.py $@
+
+###########################################################################
+# Figure S6 - HiC distance function
+###########################################################################
+
+$(BASEDIR)/Figures/figureS6.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_distance_function.py $@
+
+###########################################################################
+# Figure S7 - Effects of pseudo-counts
+###########################################################################
+
+$(BASEDIR)/Figures/figureS7.pdf:
+	python $(BASEDIR)/Scripts/Figures/pseudocount_comparison.py $@
+
+###########################################################################
+# Figure S8 -  HiC distance dependence
+###########################################################################
+
+$(BASEDIR)/Figures/figureS8.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_distance_dependence_comparison.py $@
+
+###########################################################################
+# Figure S9 - Method memory usage
+###########################################################################
+
+$(BASEDIR)/Figures/figureS9.pdf:
+	python $(BASEDIR)/Scripts/Figures/memory_comparison.py $@
+
+.SECONDARY:
+.PHONY: all

@@ -1,0 +1,99 @@
+BASEDIR?=$(subst /Makefiles,,$(CURDIR))
+include $(BASEDIR)/Settings/hic_parameters.txt
+EMPTY=
+SPACE=$(EMPTY) $(EMPTY)
+COMMA=$(EMPTY),$(EMPTY)
+HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_HindIII hg19_GM12878_MboI
+RESOLUTIONS=1M 250K 50K 10K
+TRANS=True True False False
+NUM_PROCS?=1
+ifeq ($(NUM_PROCS),1)
+	MPI=$(EMPTY)
+	CLUSTER=0
+else
+	MPI=mpirun -np $(NUM_PROCS)
+	CLUSTER=1
+endif
+
+###########################################################################
+all: setup hicpipe heatmaps
+###########################################################################
+
+###########################################################################
+# Create cython library for heatmap functions
+###########################################################################
+setup: $(BASEDIR)/Scripts/HiCPipe/heatmap.so 
+
+$(BASEDIR)/Scripts/HiCPipe/heatmap.so:
+	cd $(BASEDIR)/Scripts/HiCPipe && python $(BASEDIR)/Scripts/HiCPipe/heatmap_setup.py build_ext --inplace
+
+###########################################################################
+# Learn model parameters using HiCPipe
+###########################################################################
+hicpipe: $(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Data/HiC/HiCPipe/$(NAME).model)
+
+define model_template
+$(BASEDIR)/Data/HiC/HiCPipe/$1.model: $(BASEDIR)/Data/Genome/$2.fend \
+	$(BASEDIR)/Data/HiC/Data/$1.mat
+	@mkdir -p $(BASEDIR)/Data/HiC/HiCPipe
+	cd $(BASEDIR)/Scripts/HiCPipe && $(MAKE) $$@ \
+		CLUSTER_MAXJOBS=1 \
+		FENDS_TABLE=$(BASEDIR)/Data/Genome/$2.fend \
+		MAT_FILE=$(BASEDIR)/Data/HiC/Data/$1.mat \
+		ODIR=$(BASEDIR)/Data/HiC/HiCPipe \
+		DATASET=$1 \
+		SEGMENT_LEN_THRESHOLD=$(HIC_INSERT) \
+		CIS_THRESHOLD=$(HIC_MINDIST) \
+		CLUSTER=0 \
+		RSCRIPT=$(BASEDIR)/bin/Rscript
+endef
+$(foreach NAME,$(HIC_NAMES),$(eval $(call model_template,$(NAME),$(word 1,$(subst _, ,$(NAME)))_$(word 3,$(subst _, ,$(NAME))))))
+
+###########################################################################
+# Generate enrichment heatmaps using HiCPipe model
+###########################################################################
+heatmaps: $(foreach NAME,$(HIC_NAMES),$(foreach RES,$(RESOLUTIONS),$(BASEDIR)/Data/HiC/HiCPipe/HM/$(NAME)_$(RES).hch))
+
+define HM_template
+$(BASEDIR)/Data/HiC/HiCPipe/HM/%_$1.hch: $(BASEDIR)/Data/HiC/HiCPipe/%.model $(BASEDIR)/Scripts/HiCPipe/heatmap.so
+	@mkdir -p $(BASEDIR)/Data/HiC/HiCPipe/HM
+	$(MPI) python $(BASEDIR)/Scripts/HiCPipe/create_hicpipe_heatmap_h5dict.py \
+		$(BASEDIR)/Data/HiC/HiFive/$$*.hcd \
+		$(BASEDIR)/Data/HiC/HiCPipe/$$* \
+		$$@ \
+		$(subst K,000,$(subst M,000000,$1)) \
+		$2
+endef
+$(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call HM_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)))))
+
+###########################################################################
+# Convert data from HiFive to MAT text data format
+###########################################################################
+$(BASEDIR)/Data/HiC/Data/%.mat: $(BASEDIR)/Data/HiC/HiFive/%.hcd
+	python $(BASEDIR)/Scripts/Support/export2mat.py $^ $@
+
+###########################################################################
+# Create HiCPipe-formatted fend file with GC, length, and mappability characteristics
+###########################################################################
+$(BASEDIR)/Data/Genome/%.fend: $(BASEDIR)/Data/Genome/%.bed $(BASEDIR)/Data/Genome/%.mappability
+	python $(BASEDIR)/Scripts/Support/create_fend_file.py $^ $(BASEDIR)/Data/Genome/$(word 1,$(subst _, ,$*))_fasta $@
+
+###########################################################################
+# Find the percentage of 50bp sequences every 10bp within 500bp of RE sites that map uniquely
+###########################################################################
+$(BASEDIR)/Data/Genome/%.mappability: $(BASEDIR)/Data/Genome/%.bed
+	python $(BASEDIR)/Scripts/Support/find_mappability_seqs.py $^ \
+		$(BASEDIR)/Data/Genome/$(word 1,$(subst _, ,$*))_fasta \
+		$(BASEDIR)/tmp/$*.fa
+	$(BASEDIR)/bin/bowtie --sam --tryhard -m 1 -v 0 -f \
+		$(BASEDIR)/Data/Genome/bowtie_indices/$(word 1,$(subst _,$(SPACE),$*))/$(word 1,$(subst _,$(SPACE),$*)) \
+		$(BASEDIR)/tmp/$*.fa > $(BASEDIR)/tmp/$*.sam 2> $(BASEDIR)/tmp/$*.stats
+	python $(BASEDIR)/Scripts/Support/find_mappability_scores.py $(BASEDIR)/Data/Genome/$*.bed \
+		$(BASEDIR)/tmp/$*.sam $@
+	rm $(BASEDIR)/tmp/$*.fa
+	rm $(BASEDIR)/tmp/$*.sam
+	rm $(BASEDIR)/tmp/$*.stats
+
+
+.SECONDARY:
+.PHONY: all setup hicpipe heatmaps
