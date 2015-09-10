@@ -3,8 +3,7 @@ include $(BASEDIR)/Settings/hic_parameters.txt
 EMPTY=
 SPACE=$(EMPTY) $(EMPTY)
 COMMA=$(EMPTY),$(EMPTY)
-HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_MboI hg19_GM12878_HindIII
-MM9_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI
+HIC_NAMES=mm9_ESC hg19_GM12878
 RESOLUTIONS=1M 250K 1M 250K 50K 10K
 TRANS=1 1 0 0 0 0  
 HG19_CHROMS=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X
@@ -30,38 +29,40 @@ correlations: $(foreach NAME,$(HIC_NAMES),$(foreach PROC,exp bin prob,$(BASEDIR)
 	$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Analysis/hicnorm_$(NAME)_correlations.txt) \
 	$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Analysis/hicpipe_$(NAME)_correlations.txt) \
 	$(foreach NAME,$(HIC_NAMES),$(BASEDIR)/Analysis/mb_$(NAME)_correlations.txt) \
-	$(foreach NAME,$(MM9_NAMES),$(BASEDIR)/Analysis/hifive_$(NAME)_expnodist_correlations.txt) \
-	$(foreach NAME,$(MM9_NAMES),$(foreach PC,1 3 6,$(BASEDIR)/Analysis/hifive_$(NAME)_binPC$(PC)_correlations.txt))
+	$(BASEDIR)/Analysis/hifive_mm9_ESC_expdist_correlations.txt \
+	$(BASEDIR)/Analysis/hifive_mm9_ESC_probpois_correlations.txt \
+	$(foreach PROC,exp bin prob,$(BASEDIR)/Analysis/hifive_mm9_ESC_$(PROC)nodist_correlations.txt) \
+	$(foreach PC,1 3 6,$(BASEDIR)/Analysis/hifive_mm9_ESC_binPC$(PC)_correlations.txt)
 
 define correlation_template
-$(BASEDIR)/Analysis/$3_$1%_correlations.txt:
+$(BASEDIR)/Analysis/$3_$1_%_correlations.txt:
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_1M.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_1M.hch \
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_1M.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_1M.hch \
 		$4 10 1 $5 > $$@
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_250K.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_250K.hch \
-		$4 10 1 $5 > $$@
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_250K.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_250K.hch \
+		$4 10 1 $5 >> $$@
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_1M.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_1M.hch \
-		$4 10 0 $5 > $$@
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_1M.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_1M.hch \
+		$4 10 0 $5 >> $$@
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_250K.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_250K.hch \
-		$4 10 0 $5 > $$@
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_250K.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_250K.hch \
+		$4 10 0 $5 >> $$@
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_50K.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_50K.hch \
-		$4 10 0 $5 > $$@
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_50K.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_50K.hch \
+		$4 10 0 $5 >> $$@
 	$(MPI) python $(BASEDIR)/Scripts/Analysis/find_hic_HM_correlations.py \
-		$(BASEDIR)/Data/HiC/$2/HM/$1$$*_10K.hch $(BASEDIR)/Data/HiC/$2/HM/$1$$*_10K.hch \
-		$4 10 0 $5 > $$@
+		$(BASEDIR)/Data/HiC/$2/HM/$1_$6_$$*_10K.hch $(BASEDIR)/Data/HiC/$2/HM/$1_$7_$$*_10K.hch \
+		$4 10 0 $5 >> $$@
 endef
-$(eval $(call correlation_template,mm9,HiFive,hifive,$(MM9_CHROMS),$(MM9_MAX)))
-$(eval $(call correlation_template,hg19,HiFive,hifive,$(HG19_CHROMS),$(HG19_MAX)))
-$(eval $(call correlation_template,mm9,HiCNorm,hicnorm,$(MM9_CHROMS),$(MM9_MAX)))
-$(eval $(call correlation_template,hg19,HiCNorm,hicnorm,$(HG19_CHROMS),$(HG19_MAX)))
-$(eval $(call correlation_template,mm9,HiCPipe,hicnorm,$(MM9_CHROMS),$(MM9_MAX)))
-$(eval $(call correlation_template,hg19,HiCPipe,hicnorm,$(HG19_CHROMS),$(HG19_MAX)))
-$(eval $(call correlation_template,mm9,MB,mb,$(MM9_CHROMS),$(MM9_MAX)))
-$(eval $(call correlation_template,hg19,MB,mb,$(HG19_CHROMS),$(HG19_MAX)))
+$(eval $(call correlation_template,mm9_ESC,HiFive,hifive,$(MM9_CHROMS),$(MM9_MAX),HindIII,NcoI))
+$(eval $(call correlation_template,hg19_GM12878,HiFive,hifive,$(HG19_CHROMS),$(HG19_MAX),HindIII,MboI))
+$(eval $(call correlation_template,mm9_ESC,HiCNorm,hicnorm,$(MM9_CHROMS),$(MM9_MAX),HindIII,NcoI))
+$(eval $(call correlation_template,hg19_GM12878,HiCNorm,hicnorm,$(HG19_CHROMS),$(HG19_MAX),HindIII,MboI))
+$(eval $(call correlation_template,mm9_ESC,HiCPipe,hicpipe,$(MM9_CHROMS),$(MM9_MAX),HindIII,NcoI))
+$(eval $(call correlation_template,hg19_GM12878,HiCPipe,hicpipe,$(HG19_CHROMS),$(HG19_MAX),HindIII,MboI))
+$(eval $(call correlation_template,mm9_ESC,MB,mb,$(MM9_CHROMS),$(MM9_MAX),HindIII,NcoI))
+$(eval $(call correlation_template,hg19_GM12878,MB,mb,$(HG19_CHROMS),$(HG19_MAX),HindIII,MboI))
 
 ###########################################################################
 # Run scripts to get analsyis timings and memory usage

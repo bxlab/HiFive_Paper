@@ -26,7 +26,7 @@ def main():
 def sub_figA():
     b1 = box(['Raw 5C read pairs'])
     b2 = box(['Fragment probe sequences'])
-    rb1 = rbox(['Map read ends indendently',
+    rb1 = rbox(['Map read ends independently',
                 'to probe sequences'])
     b3 = box(['Mapped read pairs'])
     rb2 = rbox(['Count fragment pair occurences'])

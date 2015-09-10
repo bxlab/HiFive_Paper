@@ -26,7 +26,7 @@ def main():
 def sub_figA():
     b1 = box(['Raw HiC read pairs'])
     b2 = box(['Reference genome'])
-    rb0 = rbox(['Map read ends indendently',
+    rb0 = rbox(['Map read ends independently',
                 'to reference genome'])
     b3 = box(['Mapped read pairs'])
     b4 = box(['Fend Data Object'])

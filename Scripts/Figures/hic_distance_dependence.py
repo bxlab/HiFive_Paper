@@ -4,9 +4,10 @@ import sys
 import os
 
 import numpy
-from math import log
+from math import log, ceil
 from pyx import canvas, text, path, graph, color, trafo, unit, attr, deco, style
 
+import hifive
 
 unit.set(defaultunit="cm")
 text.set(mode="latex")
@@ -14,15 +15,11 @@ text.preamble(r"\usepackage{times}")
 text.preamble(r"\usepackage{sansmath}")
 text.preamble(r"\sansmath")
 text.preamble(r"\renewcommand*\familydefault{\sfdefault}")
-painter = graph.axis.painter.regular( labeldist=0.1, labelattrs=[text.size(-3)], titleattrs=[text.size(-2)] )
+painter = graph.axis.painter.regular( labeldist=0.1, labelattrs=[text.size(-3)], titleattrs=[text.size(-3)] )
 
 method_colors = {
-        'HiFive-Probability':color.cmyk.Black,
-        'HiFive-Express':color.cmyk.CadetBlue,
-        'HiFive-Binning':color.cmyk.MidnightBlue, 
-        'HiCNorm':color.cmyk.Dandelion,
-        'HiCPipe':color.cmyk.Mahogany,
-        'Matrix-Balancing':color.cmyk.OliveGreen,  
+        'raw':color.cmyk.Black,
+        'distance-corrected':color.rgb.red,
 }
 
 
@@ -30,47 +27,22 @@ def main():
     out_fname = sys.argv[1]
     basedir = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-2])
     mm9_methods = {
-        'HiFive-Probability':'%s/Analysis/hifive_mm9_ESC_prob_correlations.txt' % basedir, 
-        'HiFive-Express':'%s/Analysis/hifive_mm9_ESC_exp_correlations.txt' % basedir, 
-        'HiFive-Binning':'%s/Analysis/hifive_mm9_ESC_bin_correlations.txt' % basedir, 
-        'HiCNorm':'%s/Analysis/hicnorm_mm9_ESC_correlations.txt' % basedir, 
-        'HiCPipe':'%s/Analysis/hicpipe_mm9_ESC_correlations.txt' % basedir, 
-        'Matrix-Balancing':'%s/Analysis/mb_mm9_ESC_correlations.txt' % basedir,
-    }
-    hg19_methods = {
-        'HiFive-Probability':'%s/Analysis/hifive_hg19_GM12878_prob_correlations.txt' % basedir, 
-        'HiFive-Express':'%s/Analysis/hifive_hg19_GM12878_exp_correlations.txt' % basedir, 
-        'HiFive-Binning':'%s/Analysis/hifive_hg19_GM12878_bin_correlations.txt' % basedir, 
-        'HiCNorm':'%s/Analysis/hicnorm_hg19_GM12878_correlations.txt' % basedir, 
-        'HiCPipe':'%s/Analysis/hicpipe_hg19_GM12878_correlations.txt' % basedir, 
-        'Matrix-Balancing':'%s/Analysis/mb_hg19_GM12878_correlations.txt' % basedir,
+        'distance-corrected':'%s/Analysis/hifive_mm9_ESC_exp_correlations.txt' % basedir, 
+        'raw':'%s/Analysis/hifive_mm9_ESC_expdist_correlations.txt' % basedir, 
     }
     mm9_data = load_data(mm9_methods)
-    hg19_data = load_data(hg19_methods)
-    width = 16.8
+    width = 16.8  
     spacer = 0.4
-    overall_width = (width - spacer * 2) / 2.6
+    plot_width = (width - spacer * 4) / 5
     c = canvas.canvas()
-    mm9_ranges_img, mm9_ranges_height = plot_dataset_ranges(mm9_data, width, "MM9 ESC")
-    mm9_ranges_img.text(0, mm9_ranges_height, 'a',
+    mm9_ranges_img, mm9_ranges_height = plot_dataset_ranges(mm9_data, plot_width, spacer)
+    mm9_ranges_img.text(0, mm9_ranges_height, 'b',
                         [text.halign.left, text.valign.top, text.size(-1)])
-    c.insert(mm9_ranges_img)
-    hg19_ranges_img, hg19_ranges_height = plot_dataset_ranges(hg19_data, width, "HG19 GM12878")
-    hg19_ranges_img.text(0, hg19_ranges_height, 'b',
+    c.insert(mm9_ranges_img, [trafo.translate(plot_width + spacer, 0)])
+    mm9_overall_img = plot_overall(mm9_data, plot_width - spacer, (mm9_ranges_height - spacer) - 0.3)
+    c.text(0,  mm9_ranges_height, 'a',
                         [text.halign.left, text.valign.top, text.size(-1)])
-    c.insert(hg19_ranges_img, [trafo.translate(0, -hg19_ranges_height - spacer)])
-    overall_height = mm9_ranges_height * 0.6
-    mm9_overall_img = plot_overall(mm9_data, overall_width, overall_height, "MM9 ESC")
-    mm9_overall_img.text(0, overall_height + 0.1, 'c',
-                        [text.halign.left, text.valign.top, text.size(-1)])
-    c.insert(mm9_overall_img, [trafo.translate(0, -hg19_ranges_height - overall_height - spacer * 2)])
-    hg19_overall_img = plot_overall(hg19_data, overall_width, overall_height, "HG19 GM12878")
-    hg19_overall_img.text(0, overall_height + 0.1, 'd',
-                        [text.halign.left, text.valign.top, text.size(-1)])
-    c.insert(hg19_overall_img, [trafo.translate(overall_width * 1.6 + spacer * 2,
-                                -hg19_ranges_height - overall_height - spacer * 2)])
-    c.insert(plot_key(overall_width * 0.6 + 0.4, overall_height),
-             [trafo.translate(overall_width + spacer + 0.6, -hg19_ranges_height - overall_height - spacer * 2)])
+    c.insert(mm9_overall_img, [trafo.translate(0, 0.4)])
     c.writePDFfile(out_fname)
 
 def load_data(fdict):
@@ -86,11 +58,9 @@ def load_data(fdict):
                                      ('interaction', 'a5'), ('count', numpy.int32), ('correlation', numpy.float32)]))
     return all_data
 
-def plot_overall(data, width, height, name):
-    vo = 0.55
-    ho = 0.7
-    plot_width = width - ho
-    plot_height = height - vo - 0.3
+def plot_overall(data, width, height):
+    plot_width = width - 0.4
+    plot_height = height - 0.4
     c = canvas.canvas()
     methods = data.keys()
     methods.sort()
@@ -121,46 +91,41 @@ def plot_overall(data, width, height, name):
     for i in range(len(methods)):
         g.plot(graph.data.points(zip(zip(range(Y.shape[1]), [i] * Y.shape[1]), Y[i, :]), xname=1, y=2),
                [graph.style.changebar([method_colors[methods[i]]])])
-    c.insert(g, [trafo.translate(ho, vo)])
-    for i, label in enumerate(["10Kb", "50Kb", "250Kb", "1Mb", "250Kb", "1Mb"]):
-        c.text(ho + plot_width * (i + 0.5) / 6.0, vo - 0.05, "%s" % label,
-               [text.halign.center, text.valign.top, text.size(-3)])
-    c.text(ho + plot_width * 2.0 / 6.0, 0.05, "cis",
-           [text.halign.center, text.valign.bottom, text.size(-3)])
-    c.stroke(path.line(ho + 0.2, vo * 0.5, ho - 0.2 + plot_width * 4.0 / 6.0, vo * 0.5), [style.linewidth.THin])
-    c.text(ho + plot_width * 5.0 / 6.0, 0.05, "trans",
-           [text.halign.center, text.valign.bottom, text.size(-3)])
-    c.stroke(path.line(ho + 0.2 + plot_width * 4.0 / 6.0, vo * 0.5, ho - 0.2 + plot_width, vo * 0.5), [style.linewidth.THin])
-    c.text(0, plot_height * 0.5 + vo, "Correlation",
+    step = plot_width / (cis_binsizes.shape[0] + trans_binsizes.shape[0])
+    for i, binsize in enumerate(cis_binsizes):
+        g.text(step * (0.5 + i), -0.05, "%s cis" % (str(binsize/1000) + 'Kb').replace('000Kb', 'Mb'),
+               [text.halign.right, text.valign.middle, text.size(-4), trafo.rotate(45)])
+    for i, binsize in enumerate(trans_binsizes):
+        g.text(step * (0.5 + i + cis_binsizes.shape[0]), -0.05, "%s trans" % (str(binsize/1000) + 'Kb').replace('000Kb', 'Mb'),
+               [text.halign.right, text.valign.middle, text.size(-4), trafo.rotate(45)])
+    c.insert(g, [trafo.translate(0.7, 0.4)])
+    c.text(0, plot_height / 2.0 + 0.4, "Dataset Correlation",
            [text.halign.center, text.valign.top, text.size(-3), trafo.rotate(90)])
-    c.text(plot_width * 0.5 + ho, height, name,
-           [text.halign.center, text.valign.top, text.size(-3)])
     return c
 
-def plot_dataset_ranges(data, width, label):
+def plot_dataset_ranges(data, width, spacer):
     methods = data.keys()
     binsizes = numpy.unique(data[methods[0]]['binsize'])
-    ho = 0.4
-    ho2 = 0.4
-    vo = 0.6
-    spacer = 0.25
-    plot_width = (width - ho * 2 - (binsizes.shape[0] - 1) * spacer) / binsizes.shape[0] - ho2
-    plot_height = plot_width
+    plot_width = width - 0.4
+    plot_height = plot_width + 0.2
     c = canvas.canvas()
     for i, binsize in enumerate(binsizes):
-        img = plot_single_range(data, binsize, plot_width, plot_width)
-        c.insert(img, [trafo.translate((plot_width + spacer) * i + ho2 * (i + 1) + ho, vo)])
-    c.text(0, plot_height * 0.5 + vo, "Correlation",
+        img = plot_single_range(data, binsize, plot_width, plot_height)
+        c.insert(img, [trafo.translate((plot_width + spacer) * i + 0.4, 0.4 + spacer * 0.5)])
+    c.text(0, plot_height * 0.5 + 0.2 + spacer * 0.75, "Dataset correlation",
            [text.halign.center, text.valign.top, text.size(-3), trafo.rotate(90)])
-    c.text(width, plot_height * 0.5 + vo, label,
-           [text.halign.center, text.valign.top, text.size(-3), trafo.rotate(-90)])
-    c.text((plot_width + ho2) * 2 + spacer * 1.5 + ho, 0, "Interaction Range (bp)",
+    c.text(plot_width * 2 + spacer * 1.5 + 0.4, 0.35, "Interaction range (bp)",
            [text.halign.center, text.valign.bottom, text.size(-3)])
-    return c, plot_height + vo + 0.3
+    c.fill(path.rect(0.4, 0.025, 0.2, 0.2), [color.rgb.black])
+    c.text(0.7, 0.125, "HiFive-Express using raw reads", [text.halign.left, text.valign.middle, text.size(-2)])
+    c.fill(path.rect(plot_width * 2 + spacer * 1.5, 0.025, 0.2, 0.2), [color.rgb.red])
+    c.text(plot_width * 2 + spacer * 1.5 + 0.3, 0.125, "HiFive-Express using distance-corrected reads",
+           [text.halign.left, text.valign.middle, text.size(-2)])
+    return c, plot_height + 0.4 + spacer
 
 def plot_single_range(data, binsize, width, height):
-    plot_width = width
-    plot_height = height
+    plot_width = width - 0.4
+    plot_height = height - 0.8
     c = canvas.canvas()
     xmax = 0.0
     methods = data.keys()
@@ -199,19 +164,10 @@ def plot_single_range(data, binsize, width, height):
         binstring = "%iKb" % (binsize / 1000)
     else:
         binstring = str(binsize)
-    g.text(plot_width / 2, plot_height + 0.3, "%s binning" % (binstring),
-           [text.halign.center, text.valign.top, text.size(-2)])
-    c.insert(g)
+    g.text(plot_width / 2, plot_height + 0.05, "%s Binning" % (binstring),
+           [text.halign.center, text.valign.bottom, text.size(-2)])
+    c.insert(g, [trafo.translate(0.4, 0.4)])
     return c
 
-def plot_key(width, height):
-    c = canvas.canvas()
-    step = height / float(len(method_colors))
-    for i, meth in enumerate(['HiFive-Probability', 'HiFive-Express', 'HiFive-Binning',
-                              'HiCNorm', 'HiCPipe', 'Matrix-Balancing']):
-        c.fill(path.rect(0.2, height - step * (i + 0.5) - 0.1, 0.2, 0.2),
-               [method_colors[meth]])
-        c.text(0.5, height - step * (i + 0.5), meth, [text.halign.left, text.valign.middle, text.size(-2)])
-    return c
 if __name__ == "__main__":
     main()

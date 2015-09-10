@@ -3,6 +3,9 @@ include $(BASEDIR)/Settings/hic_parameters.txt
 EMPTY=
 SPACE=$(EMPTY) $(EMPTY)
 COMMA=$(EMPTY),$(EMPTY)
+5C_PREFIX=Nora Phillips
+5C_FILES=Nora_ESC_Male_E14.fcp Phillips_ESC.fcp
+5C_REGIONS=0 0,1,2,3,4,5,6
 HIC_NAMES=mm9_ESC_HindIII mm9_ESC_NcoI hg19_GM12878_HindIII hg19_GM12878_MboI
 RESOLUTIONS=1M 250K 50K 10K
 TRANS=True True False False
@@ -52,7 +55,8 @@ $(foreach NAME,$(HIC_NAMES),$(eval $(call model_template,$(NAME),$(word 1,$(subs
 ###########################################################################
 # Generate enrichment heatmaps using HiCPipe model
 ###########################################################################
-heatmaps: $(foreach NAME,$(HIC_NAMES),$(foreach RES,$(RESOLUTIONS),$(BASEDIR)/Data/HiC/HiCPipe/HM/$(NAME)_$(RES).hch))
+heatmaps: $(foreach R, HindIII NcoI,$(foreach N,$(5C_PREFIX),$(BASEDIR)/Data/HiC/HiCPipe/HM/mm9_ESC_$(R)_$(N).hch)) \
+	$(foreach NAME,$(HIC_NAMES),$(foreach RES,$(RESOLUTIONS),$(BASEDIR)/Data/HiC/HiCPipe/HM/$(NAME)_$(RES).hch))
 
 define HM_template
 $(BASEDIR)/Data/HiC/HiCPipe/HM/%_$1.hch: $(BASEDIR)/Data/HiC/HiCPipe/%.model $(BASEDIR)/Scripts/HiCPipe/heatmap.so
@@ -65,6 +69,18 @@ $(BASEDIR)/Data/HiC/HiCPipe/HM/%_$1.hch: $(BASEDIR)/Data/HiC/HiCPipe/%.model $(B
 		$2
 endef
 $(foreach N,$(shell seq $(words $(RESOLUTIONS))),$(eval $(call HM_template,$(word $(N),$(RESOLUTIONS)),$(word $(N),$(TRANS)))))
+
+define HM5C_template
+$(BASEDIR)/Data/HiC/HiCPipe/HM/%_$1.hch: $(BASEDIR)/Data/HiC/HiCPipe/%.model $(BASEDIR)/Scripts/HiCPipe/heatmap.so
+	@mkdir -p $(BASEDIR)/Data/HiC/HiCPipe/HM
+	$(MPI) python $(BASEDIR)/Scripts/HiCPipe/create_bounded_heatmap.py \
+		$(BASEDIR)/Data/HiC/HiFive/$$*.hcd \
+		$(BASEDIR)/Data/HiC/HiCPipe/$$* \
+		$$@ \
+		$(BASEDIR)/Data/FiveC/HiFive/$2 \
+		$3
+endef
+$(foreach N,1 2,$(eval $(call HM_template,$(word $(N),$(5C_PREFIX)),$(word $(N),$(5C_FILE)),$(word $(N),$(5C_REGIONS)))))
 
 ###########################################################################
 # Convert data from HiFive to MAT text data format

@@ -5,6 +5,7 @@ import os
 
 import numpy
 from pyx import canvas, text, path, graph, color, trafo, unit, attr, deco, style, bitmap
+import h5py
 
 import hifive
 
@@ -30,10 +31,27 @@ method_colors = {
 def main():
     out_fname = sys.argv[1]
     basedir = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-2])
-    hic_fname1 = "%s/Data/HiC/HiFive/mm9_ESC_NcoI_prob.hcp" % basedir
-    hic_fname2 = "%s/Data/HiC/HiFive/mm9_ESC_HindIII_prob.hcp" % basedir
-    hic1 = hifive.HiC(hic_fname1)
-    hic2 = hifive.HiC(hic_fname2)
+    hic_phillips_fname1 = "%s/Data/HiC/HiCPipe/HM/mm9_ESC_NcoI_Phillips.hch" % basedir
+    hic_phillips_fname2 = "%s/Data/HiC/HiCPipe/HM/mm9_ESC_HindIII_Phillips.hch" % basedir
+    hic_nora_fname1 = "%s/Data/HiC/HiCPipe/HM/mm9_ESC_NcoI_Nora.hch" % basedir
+    hic_nora_fname2 = "%s/Data/HiC/HiCPipe/HM/mm9_ESC_HindIII_Nora.hch" % basedir
+    hic_phillips1 = h5py.File(hic_phillips_fname1, 'r')
+    hic_phillips2 = h5py.File(hic_phillips_fname2, 'r')
+    hic_nora1 = h5py.File(hic_nora_fname1, 'r')
+    hic_nora2 = h5py.File(hic_nora_fname2, 'r')
+    hm_phillips = {}
+    hm_nora = {}
+    for key in hic_phillips1.keys():
+        if key.count('unbinned_counts') == 0:
+            continue
+        region = int(key.split('.')[0])
+        hm_phillips[region] = dynamically_bin(hic_phillips1, hic_phillips2, region)
+    for key in hic_nora1.keys():
+        if key.count('unbinned_counts') == 0:
+            continue
+        region = int(key.split('.')[0])
+        hm_nora[region] = dynamically_bin(hic_nora1, hic_nora2, region)
+
     fivec_fnames = {
         "Prob_Phillips":"%s/Data/FiveC/HiFive/Phillips_ESC_probnodist.fcp" % basedir,
         "Prob_Nora":"%s/Data/FiveC/HiFive/Nora_ESC_male_E14_probnodist.fcp" % basedir,
@@ -78,7 +96,7 @@ def main():
                     fragments['stop'][regions['start_frag'][i]:regions['stop_frag'][i]].reshape(-1, 1)))
                 valid = numpy.where(fc.filter[regions['start_frag'][i]:regions['stop_frag'][i]])[0]
                 binbounds = binbounds[valid, :]
-                temp = dynamically_bin(hic1, hic2, regions['chromosome'][i], binbounds)
+                temp = hm_phillips[i]
                 strands = fragments['strand'][regions['start_frag'][i]:regions['stop_frag'][i]][valid]
                 temp = temp[numpy.where(strands == 0)[0], :, :][:, numpy.where(strands == 1)[0], :]
                 hic_counts = numpy.hstack((hic_counts, temp[:, :, 0].ravel()))
@@ -111,7 +129,7 @@ def main():
                     fragments['start'][regions['start_frag'][0]:regions['stop_frag'][0]].reshape(-1, 1),
                     fragments['stop'][regions['start_frag'][0]:regions['stop_frag'][0]].reshape(-1, 1)))
             binbounds = binbounds[numpy.where(fc.filter[regions['start_frag'][0]:regions['stop_frag'][0]])[0], :]
-            temp = dynamically_bin(hic1, hic2, regions['chromosome'][0], binbounds)
+            temp = hm_nora[0]
             strands = fragments['strand'][regions['start_frag'][0]:regions['stop_frag'][0]]
             temp = temp[numpy.where(strands==0)[0], :, :][:, numpy.where(strands == 1)[0], :]
             imgs["HiC_Nora"] = hifive.plotting.plot_full_array(temp, symmetricscaling=False)
@@ -179,37 +197,54 @@ def main():
     c.writePDFfile(out_fname)
 
 
-def dynamically_bin(hic1, hic2, chrom, binbounds):
-    unbinned1, map1 = hic1.cis_heatmap(chrom, start=binbounds[0, 0], stop=binbounds[-1, 1], datatype='fend',
-                                 arraytype='full', returnmapping=True)
-    unbinned2, map2 = hic2.cis_heatmap(chrom, start=binbounds[0, 0], stop=binbounds[-1, 1], datatype='fend',
-                                 arraytype='full', returnmapping=True)
-    map1[:, 2] = (map1[:, 0] + map1[:, 1])
-    map2[:, 2] = (map2[:, 0] + map2[:, 1])
-    allmap = numpy.vstack((map1, map2))
-    allmap = allmap[numpy.argsort(allmap[:, 2]), :]
-    indices1 = numpy.searchsorted(allmap[:, 2], map1[:, 2])
-    indices1_1 = (indices1.reshape(-1, 1) * allmap.shape[0] + indices1.reshape(1, -1)).ravel()
-    indices2 = numpy.searchsorted(allmap[:, 2], map2[:, 2])
-    indices2_1 = (indices2.reshape(-1, 1) * allmap.shape[0] + indices2.reshape(1, -1)).ravel()
-    unbinned = numpy.zeros((allmap.shape[0], allmap.shape[0], 2), dtype=numpy.float32)
-    unbinned[:, :, 0] += numpy.bincount(indices1_1, minlength=allmap.shape[0] ** 2,
-                                        weights=unbinned1[:, :, 0].ravel()).reshape(allmap.shape[0], -1)
-    unbinned[:, :, 1] += numpy.bincount(indices1_1, minlength=allmap.shape[0] ** 2,
-                                        weights=unbinned1[:, :, 1].ravel()).reshape(allmap.shape[0], -1)
-    unbinned[:, :, 0] += numpy.bincount(indices2_1, minlength=allmap.shape[0] ** 2,
-                                        weights=unbinned2[:, :, 0].ravel()).reshape(allmap.shape[0], -1)
-    unbinned[:, :, 1] += numpy.bincount(indices2_1, minlength=allmap.shape[0] ** 2,
-                                        weights=unbinned2[:, :, 1].ravel()).reshape(allmap.shape[0], -1)
-    indices = numpy.triu_indices(allmap.shape[0], 1)
+def dynamically_bin(hic1, hic2, region):
+    counts = hic1['%i.counts' % region][...] + hic2['%i.counts' % region][...]
+    expected = hic1['%i.expected' % region][...] + hic2['%i.expected' % region][...]
+    upper = numpy.zeros((counts.shape[0], 2), dtype=numpy.float32)
+    upper[:, 0] = counts
+    upper[:, 1] = expected
+    mids1 = hic1['%i.mids' % region][...]
+    mids2 = hic2['%i.mids' % region][...]
+    indices = numpy.triu_indices(mids1.shape[0], 1)
+    unbinned_counts1 = numpy.zeros((mids1.shape[0], mids1.shape[0]), dtype=numpy.int32)
+    unbinned_counts1[indices] = hic1['%i.unbinned_counts' % region][...]
+    unbinned_counts1[indices[1], indices[0]] = unbinned_counts1[indices]
+    unbinned_expected1 = numpy.zeros((mids1.shape[0], mids1.shape[0]), dtype=numpy.int32)
+    unbinned_expected1[indices] = hic1['%i.unbinned_expected' % region][...]
+    unbinned_expected1[indices[1], indices[0]] = unbinned_expected1[indices]
+    indices = numpy.triu_indices(mids2.shape[0], 1)
+    unbinned_counts2 = numpy.zeros((mids2.shape[0], mids2.shape[0]), dtype=numpy.int32)
+    unbinned_counts2[indices] = hic2['%i.unbinned_counts' % region][...]
+    unbinned_counts2[indices[1], indices[0]] = unbinned_counts2[indices]
+    unbinned_expected2 = numpy.zeros((mids2.shape[0], mids2.shape[0]), dtype=numpy.int32)
+    unbinned_expected2[indices] = hic2['%i.unbinned_expected' % region][...]
+    unbinned_expected2[indices[1], indices[0]] = unbinned_expected2[indices]
+    bounds = hic1['%i.bounds' % region][...]
+    allmids = numpy.zeros((mids1.shape[0] + mids2.shape[0], 2), dtype=numpy.int32)
+    allmids[:mids1.shape[0], 0] = mids1 - 1
+    allmids[:mids1.shape[0], 1] = mids1 + 1
+    allmids[mids1.shape[0]:, 0] = mids2 - 1
+    allmids[mids1.shape[0]:, 1] = mids2 + 1
+    allmids = allmids[numpy.argsort(allmids[:, 0]), :]
+    indices1 = numpy.searchsorted(allmids[:, 1], mids1)
+    indices1_1 = (indices1.reshape(-1, 1) * allmids.shape[0] + indices1.reshape(1, -1)).ravel()
+    indices2 = numpy.searchsorted(allmids[:, 1], mids2)
+    indices2_1 = (indices2.reshape(-1, 1) * allmids.shape[0] + indices2.reshape(1, -1)).ravel()
+    unbinned = numpy.zeros((allmids.shape[0], allmids.shape[0], 2), dtype=numpy.float32)
+    unbinned[:, :, 0] += numpy.bincount(indices1_1, minlength=allmids.shape[0] ** 2,
+                                        weights=unbinned_counts1.ravel()).reshape(allmids.shape[0], -1)
+    unbinned[:, :, 1] += numpy.bincount(indices1_1, minlength=allmids.shape[0] ** 2,
+                                        weights=unbinned_expected1.ravel()).reshape(allmids.shape[0], -1)
+    unbinned[:, :, 0] += numpy.bincount(indices2_1, minlength=allmids.shape[0] ** 2,
+                                        weights=unbinned_counts2.ravel()).reshape(allmids.shape[0], -1)
+    unbinned[:, :, 1] += numpy.bincount(indices2_1, minlength=allmids.shape[0] ** 2,
+                                        weights=unbinned_expected2.ravel()).reshape(allmids.shape[0], -1)
+    indices = numpy.triu_indices(unbinned.shape[0], 1)
     unbinned = unbinned[indices[0], indices[1], :]
-    binned, binmap = hic1.cis_heatmap(chrom, binbounds=binbounds, datatype='fend', arraytype='full',
-                                      returnmapping=True)
-    binned += hic2.cis_heatmap(chrom, binbounds=binbounds, datatype='fend', arraytype='full')
-    indices = numpy.triu_indices(binbounds.shape[0], 1)
-    upper = binned[indices[0], indices[1], :]
-    hifive.hic_binning.dynamically_bin_cis_array(unbinned, allmap, upper, binmap,
+    indices = numpy.triu_indices(bounds.shape[0], 1)
+    hifive.hic_binning.dynamically_bin_cis_array(unbinned, allmids, upper, bounds,
                                                  expansion_binsize=0, minobservations=25)
+    binned = numpy.zeros((bounds.shape[0], bounds.shape[0], 2), dtype=numpy.float32)
     binned[indices[0], indices[1], :] = upper
     binned[indices[1], indices[0], :] = upper
     return binned

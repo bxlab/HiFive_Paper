@@ -42,9 +42,9 @@ def main():
             [trafo.translate(plot_width + 0.8, 0)])
     c.text(-0.6, plot_width * 0.5, "Log count",
            [text.halign.center, text.valign.bottom, text.size(-3), trafo.rotate(90)])
-    c.text(plot_width * 0.5, -0.4, "Log distance",
+    c.text(plot_width * 0.5, -0.4, "Log distance (Kb)",
            [text.halign.center, text.valign.top, text.size(-3)])
-    c.text(plot_width * 1.5 + 0.8, -0.4, "Log distance",
+    c.text(plot_width * 1.5 + 0.8, -0.4, "Log distance (Kb)",
            [text.halign.center, text.valign.top, text.size(-3)])
     c.text(plot_width * 0.5, plot_width + 0.1, "Raw",
            [text.halign.center, text.valign.bottom, text.size(-2)])
@@ -155,76 +155,6 @@ def CreateKey(min_val, max_val, height, width, log_display=True, orientation='le
             c.stroke( path.line(tick_step * i, 0, tick_step * i, -height * 0.4 ), [style.linewidth.THin] )
             c.text(tick_step*i, -height * 0.5, r"%i" % (numpy.round(labels[i])),
                    [text.halign.center, text.valign.top, text.size(-3)] )
-    return c
-
-
-def CreateFigureB(hic_data, width, height):
-    results = {}
-    plot_width = (width - 1.6) / 3.0
-    input = open(hic_data, 'r')
-    for line in input:
-        temp = line.strip('\n').split('\t')
-        key = temp[0]
-        temp = temp[1:]
-        for i in range(len(temp)):
-            temp[i] = float(temp[i])
-        results[key] = numpy.array(temp, dtype=numpy.float32)
-    input.close()
-    c = canvas.canvas()
-    xmin = 1.0
-    xmax = 1.0
-    for i, dataset in enumerate(['uncorrected', 'hifive', 'express']):
-        X = results['%s_bins' % dataset] / 1000.0
-        xmin = min(xmin, numpy.amin(X))
-        xmax = max(xmax, numpy.amax(X))
-    for i, dataset in enumerate(['uncorrected', 'hifive', 'express']):
-        X = results['%s_bins' % dataset] / 1000.0   
-        ymin = numpy.inf
-        ymax = -numpy.inf
-        for key in results:
-            if key.count('bins') > 0 or key.count(dataset) == 0:
-                continue
-            where = numpy.where(results[key] > 0.0)
-            ymin = min(numpy.amin(results[key][where]), ymin)
-            ymax = max(numpy.amax(results[key][where]), ymax)
-        if i == 0:
-            yaxis = graph.axis.log(min=ymin, max=ymax, title='', painter=painter)
-        else:
-            yaxis = graph.axis.log(min=ymin, max=ymax, title='', parter=None)
-        g = graph.graphxy( width=plot_width, height=plot_width, 
-        x=graph.axis.log(min=xmin, max=xmax, title='', painter=painter), 
-        y=yaxis, 
-        x2=graph.axis.lin(min=0, max=1, parter=None),
-        y2=graph.axis.lin(min=0, max=1, parter=None) )
-        for key in results.keys():
-            if key.count('bins') > 0 or key.count(dataset) == 0:
-                continue
-            temp = key.split('_')
-            if temp[0] == 'raw' or temp[0] == 'smoothed':
-                continue
-            where = numpy.where(results[key] > 0.0)
-            g.plot(graph.data.values(x=X[where], y=results[key][where]),
-                   [graph.style.line([style.linestyle.dotted])] )
-        where = numpy.where(results['raw_%s' % dataset] > 0.0)
-        g.plot(graph.data.values(x=X[where], y=results['raw_%s' % dataset][where]),
-               [graph.style.line([])] )
-        where = numpy.where(results['smoothed_%s' % dataset] > 0.0)
-        g.plot(graph.data.values(x=X[where], y=results['smoothed_%s' % dataset][where]),
-               [graph.style.line([color.cmyk.Red])] )
-        c.insert(g, [trafo.translate(1.2 + plot_width * i, 1.0)])
-    c.text(0, 1.0 + plot_width * 0.5, r"Mean Interaction Count",
-           [text.halign.center, text.valign.top, text.size(-2), trafo.rotate(90)])
-    c.text(1.2 + plot_width * 1.5, 0, r"Inter-fragment Distance (Kb)",
-           [text.halign.center, text.valign.bottom, text.size(-2)])
-    c.text(0, height, r"b", [text.halign.left, text.valign.top, text.size(0)])
-    c.text(width, 1.0 + plot_width * 0.5, r"HiC",
-           [text.halign.center, text.valign.top, text.size(-2), trafo.rotate(-90)])
-    c.text(1.2 + plot_width * 0.5, 1.2 + plot_width, r"Raw",
-           [text.halign.center, text.valign.middle, text.size(-3)])
-    c.text(1.2 + plot_width * 1.5, 1.2 + plot_width, r"HiFive corrected",
-           [text.halign.center, text.valign.middle, text.size(-3)])
-    c.text(1.2 + plot_width * 2.5, 1.2 + plot_width, r"HiFive-Express corrected",
-           [text.halign.center, text.valign.middle, text.size(-3)])
     return c
 
 

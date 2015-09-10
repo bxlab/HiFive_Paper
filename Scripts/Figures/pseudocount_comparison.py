@@ -106,13 +106,13 @@ def plot_overall(data, width, height, int_type):
                [graph.style.changebar([method_colors[methods[i]]])])
     c.insert(g, [trafo.translate(ho, vo)])
     if int_type == 'cis':
-        for i, label in enumerate(["10K", "50K", "250K", "1M"]):
+        for i, label in enumerate(["10Kb", "50Kb", "250Kb", "1Mb"]):
             c.text(ho + plot_width * (i + 0.5) / 4.0, vo - 0.05, "%s" % label,
                    [text.halign.center, text.valign.top, text.size(-3)])
         c.text(ho + plot_width * 0.5, height, "Cis",
                [text.halign.center, text.valign.top, text.size(-2)])
     else:
-        for i, label in enumerate(["250K", "1M"]):
+        for i, label in enumerate(["250Kb", "1Mb"]):
             c.text(ho + plot_width * (i + 0.5) / 2.0, vo - 0.05, "%s" % label,
                    [text.halign.center, text.valign.top, text.size(-3)])
         c.text(ho + plot_width * 0.5, height, "Trans",
@@ -137,7 +137,7 @@ def plot_dataset_ranges(data, width):
         c.insert(img, [trafo.translate((plot_width + spacer) * i + ho2 * (i + 1) + ho, vo)])
     c.text(0, plot_height * 0.5 + vo, "Correlation",
            [text.halign.center, text.valign.top, text.size(-3), trafo.rotate(90)])
-    c.text((plot_width + ho2) * 2 + spacer * 1.5 + ho, 0, "Interaction Range",
+    c.text((plot_width + ho2) * 2 + spacer * 1.5 + ho, 0, "Interaction Range (bp)",
            [text.halign.center, text.valign.bottom, text.size(-3)])
     return c, plot_height + vo + 0.3
 
@@ -175,9 +175,9 @@ def plot_single_range(data, binsize, width, height, methods):
             g.plot(graph.data.points(zip(X, Y), x=1, y=2),
                    [graph.style.line(lineattrs=[method_colors[method], style.linewidth.Thick])])
     if binsize / 1000000 > 0:
-        binstring = "%iM" % (binsize / 1000000)
+        binstring = "%iMb" % (binsize / 1000000)
     elif binsize / 1000 > 0:
-        binstring = "%iK" % (binsize / 1000)
+        binstring = "%iKb" % (binsize / 1000)
     else:
         binstring = str(binsize)
     g.text(plot_width / 2, plot_height + 0.3, "%s binning" % (binstring),

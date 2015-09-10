@@ -1,6 +1,6 @@
 BASEDIR?=$(subst /Makefiles,,$(CURDIR))
 
-all: $(foreach N,2 3 4,$(BASEDIR)/Figures/figure${N}.pdf) $(foreach N,1 2 3 4 5 6 7 8 9,$(BASEDIR)/Figures/figureS${N}.pdf)
+all: $(foreach N,2 3 4,$(BASEDIR)/Figures/figure${N}.pdf) $(foreach N,1 2 3 4 5 6 7 8 9 10 11 12 13,$(BASEDIR)/Figures/figureS${N}.pdf)
 
 ###########################################################################
 # Figure 2 - 5C algorithm comparison
@@ -66,24 +66,52 @@ $(BASEDIR)/Figures/figureS6.pdf:
 	python $(BASEDIR)/Scripts/Figures/hic_distance_function.py $@
 
 ###########################################################################
-# Figure S7 - Effects of pseudo-counts
+# Figure S7 - HiC algorithm distance cutoff comparison
 ###########################################################################
 
 $(BASEDIR)/Figures/figureS7.pdf:
-	python $(BASEDIR)/Scripts/Figures/pseudocount_comparison.py $@
+	python $(BASEDIR)/Scripts/Figures/hic_distance_cutoff_comparison.py $@
 
 ###########################################################################
-# Figure S8 -  HiC distance dependence
+# Figure S8 - 5C algorithm distance cutoff comparison
 ###########################################################################
 
 $(BASEDIR)/Figures/figureS8.pdf:
-	python $(BASEDIR)/Scripts/Figures/hic_distance_dependence_comparison.py $@
+	python $(BASEDIR)/Scripts/Figures/fivec_distance_cutoff_comparison.py $@
 
 ###########################################################################
-# Figure S9 - Method memory usage
+# Figure S9 - HiC probability algorithm model comparison
 ###########################################################################
 
 $(BASEDIR)/Figures/figureS9.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_probability_algorithm_comparison.py $@
+
+###########################################################################
+# Figure S10 - 5C-HiCPipe analysis performance
+###########################################################################
+
+$(BASEDIR)/Figures/figureS10.pdf:
+	python $(BASEDIR)/Scripts/Figures/fivec_hicpipe_algorithm_comparison.py $@
+
+###########################################################################
+# Figure S11 - Effects of pseudo-counts
+###########################################################################
+
+$(BASEDIR)/Figures/figureS11.pdf:
+	python $(BASEDIR)/Scripts/Figures/pseudocount_comparison.py $@
+
+###########################################################################
+# Figure S12 -  HiC distance dependence
+###########################################################################
+
+$(BASEDIR)/Figures/figureS12.pdf:
+	python $(BASEDIR)/Scripts/Figures/hic_distance_dependence_comparison.py $@
+
+###########################################################################
+# Figure S13 - Method memory usage
+###########################################################################
+
+$(BASEDIR)/Figures/figureS13.pdf:
 	python $(BASEDIR)/Scripts/Figures/memory_comparison.py $@
 
 .SECONDARY:
