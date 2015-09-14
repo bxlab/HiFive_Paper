@@ -707,7 +707,7 @@ class HiC(object):
             gradients = numpy.zeros(corrections.shape[0], dtype=numpy.float64)
             cont = True
             if not self.silent:
-                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),            
+                print >> sys.stderr, ("\r%s\rLearning corrections...") % (' ' * 80),
             log_corrections = numpy.log(corrections).astype(numpy.float32)
             if model == 'binomial':
                 cost_function = _optimize.calculate_binom_cost
@@ -764,7 +764,7 @@ class HiC(object):
                             self.comm.Send(new_corrections, dest=i, tag=13)
                     else:
                         self.comm.Recv(new_corrections, source=0, tag=13)
-                    log_corrections = numpy.log(new_corrections)
+                    log_corrections[:] = numpy.log(new_corrections)
                     cost = cost_function(counts,
                                          zero_indices0,
                                          zero_indices1,
@@ -813,7 +813,7 @@ class HiC(object):
             chrom_mean = chrom_mean ** 2.0 - numpy.sum(corrections ** 2.0)
             chrom_mean /= corrections.shape[0] * (corrections.shape[0] - 1)
             self.chromosome_means[self.chr2int[chrom]] += numpy.log(chrom_mean)
-            log_corrections = numpy.log(corrections).astype(numpy.float32)
+            log_corrections[:] = numpy.log(corrections).astype(numpy.float32)
             cost = cost_function(counts,
                                  zero_indices0,
                                  zero_indices1,
@@ -853,7 +853,7 @@ class HiC(object):
 
     def find_express_fend_corrections(self, iterations=100, mindistance=0, maxdistance=0, remove_distance=True, 
                                       usereads='cis', mininteractions=0, minchange=0.0001, chroms=[], precorrect=False,
-                                      binary=False, kr=True):
+                                      binary=False, kr=False):
         """
         Using iterative matrix-balancing approximation, learn correction values for each valid fend. This function is MPI compatible.
 
@@ -1019,6 +1019,14 @@ class HiC(object):
                                                                useread_int,
                                                                mindistance,
                                                                maxdistance)
+        if self.rank == 0:
+            for i in range(1, self.num_procs):
+                interactions += self.comm.recv(source=i, tag=11)
+            for i in range(1, self.num_procs):
+                self.comm.Send(interactions, dest=i, tag=13)
+        else:
+            self.comm.send(interactions, dest=0, tag=11)
+            self.comm.Recv(interactions, source=0, tag=13)
         # precalculate interaction distance means for all included interactions
         if not remove_distance or data is None:
             distance_means = None

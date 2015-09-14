@@ -27,7 +27,7 @@ all: setup fivec hic
 # Compile HiFive
 ###########################################################################
 setup:
-	cd $(BASEDIR)/Scripts/hifive-1.1.2 && python setup.py install --prefix $(BASEDIR)
+	cd $(BASEDIR)/Scripts/hifive-1.1.3 && python setup.py install --prefix $(BASEDIR)
 	export PYTHONPATH=$(BASEDIR)/lib/python2.7/site-packages/$(PYTHONPATH)
 
 ###########################################################################
@@ -329,7 +329,6 @@ $(BASEDIR)/Data/HiC/HiFive/mm9%_expdist.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
 		-e $(HIC_EXP_ITER) \
 		-w $(HIC_EXP_READS) \
 		-g $(HIC_EXP_CHANGE) \
-		-k \
 		$^
 
 $(BASEDIR)/Data/HiC/HiFive/mm9%_expnodist.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
@@ -343,7 +342,6 @@ $(BASEDIR)/Data/HiC/HiFive/mm9%_expnodist.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.h
 		-w $(HIC_EXP_READS) \
 		-g $(HIC_EXP_CHANGE) \
 		-d \
-		-k \
 		$^
 
 $(BASEDIR)/Data/HiC/HiFive/mm9%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
@@ -357,7 +355,6 @@ $(BASEDIR)/Data/HiC/HiFive/mm9%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/mm9%.hcp
 		-w $(HIC_EXP_READS) \
 		-g $(HIC_EXP_CHANGE) \
 		-d \
-		-k \
 		$^
 
 $(BASEDIR)/Data/HiC/HiFive/hg19%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
@@ -371,7 +368,6 @@ $(BASEDIR)/Data/HiC/HiFive/hg19%_exp.hcp: $(BASEDIR)/Data/HiC/HiFive/hg19%.hcp
 		-w $(HIC_EXP_READS) \
 		-g $(HIC_EXP_CHANGE) \
 		-d \
-		-k \
 		$^
 
 $(BASEDIR)/Data/HiC/HiFive/%.hcp: $(BASEDIR)/Data/HiC/HiFive/%.hcd
